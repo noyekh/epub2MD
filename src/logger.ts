@@ -70,38 +70,39 @@ export function success(message: string, ...args: any[]): void {
 }
 
 /**
- * 警告日志
+ * 警告日志 (outputs to stderr)
  * @param message 消息内容
  * @param args 额外参数
  */
 export function warn(message: string, ...args: any[]): void {
     if (currentLogLevel <= LogLevel.WARN) {
-        console.log(pc.yellow(formatMessage(message)), ...args)
+        console.error(pc.yellow(formatMessage(message)), ...args)
     }
 }
 
 /**
- * 错误日志
+ * 错误日志 (outputs to stderr)
  * @param message 消息内容
  * @param args 额外参数
  */
 export function error(message: string, ...args: any[]): void {
     if (currentLogLevel <= LogLevel.ERROR) {
-        console.log(pc.red(formatMessage(message)), ...args)
+        console.error(pc.red(formatMessage(message)), ...args)
     }
 }
 
 /**
- * 输出JSON格式数据
+ * 输出JSON格式数据 (colorized)
  * @param data 要输出的数据
  */
 export function json(data: any): void {
-    try {
-        const { json: beautyJson } = require('beauty-json')
-        beautyJson.log(data)
-    } catch (e) {
-        console.log(data)
-    }
+    const str = JSON.stringify(data, null, 2)
+    // Colorize JSON: keys in cyan, strings in yellow, numbers in magenta
+    const colorized = str
+        .replace(/"([^"]+)":/g, `${pc.cyan('"$1"')}:`)
+        .replace(/: "([^"]*)"/g, `: ${pc.yellow('"$1"')}`)
+        .replace(/: (\d+)/g, `: ${pc.magenta('$1')}`)
+    console.log(colorized)
 }
 
 // 导出默认对象，包含所有日志函数

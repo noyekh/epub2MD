@@ -5,10 +5,17 @@ import fs from 'node:fs'
 import parseEpub from '../parseEpub'
 import { Converter } from './convert'
 import { mergeMarkdowns } from './merge'
-import logger from '../logger'
+import logger, { setLogLevel } from '../logger'
 import { expandWildcard } from './utils'
 
 const name = 'epub2md'
+
+// Exit codes
+const EXIT_SUCCESS = 0
+const EXIT_ERROR = 1
+const EXIT_INVALID_ARGS = 2
+const EXIT_FILE_NOT_FOUND = 3
+const EXIT_PARSE_ERROR = 4
 
 export const Commands = {
   convert: 'convert',
@@ -41,6 +48,10 @@ const commands: [CommandType, string, (boolean | string)?][] = [
   ],
 ]
 
+// Additional CLI options
+args.option('verbose', 'Increase output verbosity', false)
+args.option('quiet', 'Suppress non-error output', false)
+
 const DEFAULT_COMMAND = Commands.convert
 
 // define options
@@ -50,6 +61,11 @@ commands.forEach((cmd) => args.option(cmd[0], cmd[1], cmd[2]))
 const flags = args.parse(process.argv, {
   name,
 })
+
+// Set log level based on verbose/quiet flags
+// LogLevel: DEBUG=0, INFO=1, SUCCESS=2, WARN=3, ERROR=4
+if (flags.verbose) setLogLevel(0) // DEBUG
+if (flags.quiet) setLogLevel(4) // ERROR
 
 // Check for unprocessed arguments (possibly file paths)
 const unprocessedArgs = process.argv
@@ -108,11 +124,13 @@ if (!hasRun && flags[Commands.unzip]) {
       })
       .catch((error) => {
         logger.error(error)
+        process.exit(EXIT_ERROR)
       })
 
     hasRun = true
   } else {
     logger.error('No valid epub file path provided for unzip command')
+    process.exit(EXIT_INVALID_ARGS)
   }
 }
 
@@ -130,7 +148,8 @@ if (!hasRun) {
           logger.info(`Merging successful! Output file: ${outputPath}`)
         })
         .catch((error) => {
-          logger.info(`Merging failed: ${error}`)
+          logger.error(`Merging failed: ${error}`)
+          process.exit(EXIT_ERROR)
         })
 
       hasRun = true
@@ -173,7 +192,7 @@ async function run(cmd: CommandType) {
 
     if (!epubPath) {
       logger.error('No valid epub file path provided')
-      return
+      process.exit(EXIT_INVALID_ARGS)
     }
 
     // Expand wildcard patterns
@@ -181,7 +200,7 @@ async function run(cmd: CommandType) {
 
     if (epubFiles.length === 0) {
       logger.error(`No files found matching pattern: ${epubPath}`)
-      return
+      process.exit(EXIT_FILE_NOT_FOUND)
     }
 
     // Check if direct merge is needed
@@ -214,6 +233,7 @@ async function run(cmd: CommandType) {
     }
 
     // ====== convert to markdown ====
+    let failedCount = 0
     for (let i = 0; i < epubFiles.length; i++) {
       const currentFile = epubFiles[i]
 
@@ -238,11 +258,20 @@ async function run(cmd: CommandType) {
         }
       } catch (error) {
         logger.error(`[${i + 1}/${epubFiles.length}] Failed to convert ${currentFile}:`, error)
+        failedCount++
       }
     }
 
     if (epubFiles.length > 1) {
-      logger.success(`Completed processing ${epubFiles.length} files`)
+      if (failedCount > 0) {
+        logger.warn(`Completed with ${failedCount} failure(s) out of ${epubFiles.length} files`)
+      } else {
+        logger.success(`Completed processing ${epubFiles.length} files`)
+      }
+    }
+
+    if (failedCount > 0) {
+      process.exit(EXIT_ERROR)
     }
 
     return
@@ -258,8 +287,10 @@ async function run(cmd: CommandType) {
       })
       .catch((error) => {
         logger.error(error)
+        process.exit(EXIT_PARSE_ERROR)
       })
   } else {
     logger.error(`Path must be a string, got ${typeof cmdPath}`)
+    process.exit(EXIT_INVALID_ARGS)
   }
 }

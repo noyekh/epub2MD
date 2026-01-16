@@ -1,5 +1,3 @@
-import _last from 'lodash/last'
-
 /**
  * Parse the URL link and extract its components.
  * @param href - The URL string to be parsed.
@@ -22,9 +20,9 @@ export default function parseHref(href: string, decode: boolean = false): {
   const hash = href.split('#')[1]
   const url = href.split('#')[0]
   const prefix = url.split('/').slice(0, -1).join('/')
-  const filename = _last(url.split('/')) as string
+  const filename = url.split('/').at(-1) ?? ''
   const name = filename.split('.').slice(0, -1).join('.')
-  let ext = _last(filename.split('.'))
+  let ext = filename.split('.').at(-1)
 
   if (filename.indexOf('.') === -1) {
     ext = ''

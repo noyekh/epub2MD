@@ -1,13 +1,34 @@
 import fs from 'node:fs'
 import { Buffer } from 'node:buffer'
-import _ from 'lodash'
 
 import type { ParserOptions, GeneralObject } from './types'
-// @ts-ignore
-import nodeZip from 'node-zip'
+import AdmZip from 'adm-zip'
 import parseLink from './parseLink'
 import parseSection, { Section } from './parseSection'
 import { xmlToJson, determineRoot } from './utils'
+
+// Lodash replacements
+const get = (obj: any, path: string[], defaultValue: any = undefined): any => {
+  let result = obj
+  for (const key of path) {
+    if (result == null) return defaultValue
+    result = result[key]
+  }
+  return result ?? defaultValue
+}
+
+const pickBy = <T extends Record<string, any>>(
+  obj: T,
+  predicate: (value: any, key: string) => boolean
+): Partial<T> => {
+  const result: Partial<T> = {}
+  for (const key of Object.keys(obj)) {
+    if (predicate(obj[key], key)) {
+      result[key as keyof T] = obj[key]
+    }
+  }
+  return result
+}
 
 type MetaInfo = Partial<{
   title: string,
@@ -24,25 +45,25 @@ const parseMetadata = (metadata: GeneralObject = {}): MetaInfo => {
 
   (['title', 'author', 'description', 'language', 'publisher', 'rights'] as (keyof MetaInfo)[]).forEach((item: keyof MetaInfo) => {
     if (item === 'author') {
-      const author = _.get(meta, ['dc:creator'], [])
-      if (_.isArray(author)) {
+      const author = get(meta, ['dc:creator'], [])
+      if (Array.isArray(author)) {
         info.author = author.map((a) => a['#text'])
       } else {
         info.author = [author?.['#text']]
       }
     }
     else if (item === 'description') {
-      info.description = _.get(meta, [item, '_'])
+      info.description = get(meta, [item, '_'])
     }
     else {
-      info[item] = _.get(meta, ['dc:' + item]) as string
+      info[item] = get(meta, ['dc:' + item]) as string
     }
   })
 
-  return _.pickBy(info, (v: string | string[]) => {
-    if (Array.isArray(v)) return v.length !== 0 && !_.isUndefined(v[0])
-    return !_.isUndefined(v)
-  })
+  return pickBy(info, (v: string | string[]) => {
+    if (Array.isArray(v)) return v.length !== 0 && v[0] !== undefined
+    return v !== undefined
+  }) as MetaInfo
 }
 
 export const defaultOptions = { type: "path", expand: false } as ParserOptions
@@ -63,7 +84,7 @@ interface Manifest {
 }
 
 export class Epub {
-  private _zip: any // nodeZip instance
+  private _zip: AdmZip
   private _opfPath?: string
   private _root?: string
   private _content?: GeneralObject
@@ -80,8 +101,9 @@ export class Epub {
   sections?: Section[]
   tocFile?: string
 
-  constructor(buffer: Buffer, options?: ParserOptions) {
-    this._zip = new nodeZip(buffer, { binary: true, base64: false, checkCRC32: true })
+  constructor(input: string | Buffer, options?: ParserOptions) {
+    // AdmZip accepts either a file path (string) or a Buffer
+    this._zip = new AdmZip(input)
     if (options) this._options = { ...defaultOptions, ...options }
   }
 
@@ -95,13 +117,17 @@ export class Epub {
     let _path
     if (path[0] === '/') {
       // use absolute path, root is zip root
-      _path = path.substr(1)
+      _path = path.substring(1)
     } else {
       _path = this._root + path
     }
-    const file = this._zip.file(decodeURI(_path))
-    if (file) {
-      return file
+    const decodedPath = decodeURI(_path)
+    const entry = this._zip.getEntry(decodedPath)
+    if (entry) {
+      return {
+        asText: () => entry.getData().toString('utf8'),
+        asNodeBuffer: () => entry.getData()
+      }
     } else {
       throw new Error(`${_path} not found!`)
     }
@@ -127,11 +153,11 @@ export class Epub {
    */
   private _resolveIdFromLink(href: string): string {
     const { name: tarName } = parseLink(href)
-    const tarItem = _.find(this._manifest, (item: Manifest) => {
+    const tarItem = this._manifest?.find((item: Manifest) => {
       const { name } = parseLink(item.href)
       return name === tarName
     })
-    return _.get(tarItem!, 'id')
+    return tarItem?.id ?? ''
   }
 
   /**
@@ -152,7 +178,7 @@ export class Epub {
   getManifest(content?: GeneralObject): Manifest[] {
     return (
       this._manifest ||
-      (_.get(content, ['package', 'manifest', 'item'], []).map((item: any) => ({
+      (get(content, ['package', 'manifest', 'item'], []).map((item: any) => ({
         href: item['@href'],
         id: item['@id'],
       })
@@ -163,7 +189,7 @@ export class Epub {
   getSpine(): Record<string, number> {
     const spine: Record<string, number> = {}
     this.getManifest()
-    let itemRefs = _.get(this._content, ['package', 'spine', 'itemref'], [])
+    let itemRefs = get(this._content, ['package', 'spine', 'itemref'], [])
     if (!Array.isArray(itemRefs)) itemRefs = [itemRefs]
     itemRefs.map(
       (item: GeneralObject, i: number) => {
@@ -228,13 +254,13 @@ export class Epub {
     }
 
     // may be GeneralObject or GeneralObject[] or []
-    const rootNavPoints = _.get(tocObj, ['ncx', 'navMap', 'navPoint'], [])
+    const rootNavPoints = get(tocObj, ['ncx', 'navMap', 'navPoint'], [])
     const parseNavPoint = (navPoint: GeneralObject) => {
       // link to section
-      const path = _.get(navPoint, ['content', '@src'], '')
-      const name = _.get(navPoint, ['navLabel', 'text'])
+      const path = get(navPoint, ['content', '@src'], '')
+      const name = get(navPoint, ['navLabel', 'text'])
 
-      const playOrder = _.get(navPoint, ['@playOrder']) as string
+      const playOrder = get(navPoint, ['@playOrder']) as string
       const { hash } = parseLink(path)
 
       let children = navPoint.navPoint
@@ -288,13 +314,14 @@ export class Epub {
    * @private
    */
   private _resolveSections(id?: string) {
-    let list: any[] = _.union(Object.keys(this._spine!))
+    let list: any[] = [...new Set(Object.keys(this._spine!))]
     // no chain
     if (id) {
       list = [id];
     }
     return list.map((id) => {
-      const path = _.find(this._manifest, { id })!.href
+      const item = this._manifest?.find(m => m.id === id)
+      const path = item!.href
       const html = this.resolve(path).asText()
 
       const section = parseSection({
@@ -329,11 +356,11 @@ export class Epub {
     this._root = determineRoot(this._opfPath)
 
     this._manifest = this.getManifest(this._content)
-    this._metadata = _.get(this._content, ['package', 'metadata'], {})
+    this._metadata = get(this._content, ['package', 'metadata'], {})
 
     // https://github.com/gaoxiaoliangz/epub-parser/issues/13
     // https://www.w3.org/publishing/epub32/epub-packages.html#sec-spine-elem
-    this.tocFile = (_.find(this._manifest, { id: 'ncx' }) || {}).href
+    this.tocFile = (this._manifest?.find(m => m.id === 'ncx') || {}).href
     if (this.tocFile) {
       const toc = this._resolveXMLAsJsObject(this.tocFile)
       this._toc = toc
@@ -350,14 +377,27 @@ export class Epub {
 
 
 export default function parserWrapper(target: string | Buffer, opts?: ParserOptions): Promise<Epub> {
-  // seems 260 is the length limit of old windows standard
-  // so path length is not used to determine whether it's path or binary string
-  // the downside here is that if the filepath is incorrect, it will be treated as binary string by default
-  // but it can use options to define the target type
   const options = { ...defaultOptions, ...opts }
-  let _target = target
-  if (options.type === 'path' || (typeof target === 'string' && fs.existsSync(target))) {
-    _target = fs.readFileSync(target as string, 'binary')
+  let _target: string | Buffer = target
+
+  // If target is a string path, pass it directly to AdmZip (more efficient)
+  // If target is explicitly marked as buffer or binaryString, read as buffer
+  if (typeof target === 'string') {
+    if (options.type === 'binaryString') {
+      // Convert binary string to Buffer
+      _target = Buffer.from(target, 'binary')
+    } else if (options.type === 'buffer') {
+      // Should already be a Buffer, but handle edge case
+      _target = Buffer.from(target, 'binary')
+    } else if (options.type === 'path' || fs.existsSync(target)) {
+      // Pass file path directly to AdmZip - it handles file reading internally
+      _target = target
+    } else {
+      // Fallback: treat as binary string
+      _target = Buffer.from(target, 'binary')
+    }
   }
-  return new Epub(_target as Buffer, options).parse()
+  // If target is already a Buffer, use it directly
+
+  return new Epub(_target, options).parse()
 }

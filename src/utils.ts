@@ -1,8 +1,14 @@
-import _ from 'lodash'
 import { XMLParser } from 'fast-xml-parser'
 import { GeneralObject } from './types'
 import type { TOCItem } from './parseEpub'
 
+// Lodash replacements
+const isArrayLike = (obj: any): boolean =>
+  obj != null && typeof obj !== 'function' && typeof obj.length === 'number' && obj.length >= 0
+
+const isEmpty = (arr: any[]): boolean => !arr || arr.length === 0
+
+const flattenDeep = <T>(arr: any[]): T[] => arr.flat(Infinity) as T[]
 
 export interface TraverseNestedObject {
   preFilter?: (node: GeneralObject) => boolean
@@ -20,9 +26,6 @@ const xmlParser = new XMLParser({
   attributeNamePrefix: '@',
   ignoreAttributes: false,
 });
-
-const cacheNavPool: Record<string, TOCItem> = {
-}
 
 /**
  * Fix the generated file name according to the title corresponding to toc
@@ -93,12 +96,12 @@ export const traverseNestedObject = (
 
   const traverse = (rootObject: any | any[]): any[] => {
     const makeArray = () => {
-      if (
-        Array.isArray(rootObject) ||
-        _.isArrayLikeObject(rootObject) ||
-        _.isArrayLike(rootObject)
-      ) {
+      if (Array.isArray(rootObject)) {
         return rootObject
+      }
+      // Convert array-like objects to actual arrays (they have length but no .filter())
+      if (isArrayLike(rootObject)) {
+        return Array.from(rootObject)
       }
       return [rootObject]
     }
@@ -107,17 +110,17 @@ export const traverseNestedObject = (
     let result = rootArray
 
     if (preFilter) {
-      result = _.filter(result, preFilter)
+      result = result.filter(preFilter)
     }
 
-    result = _.map(result, (object: any, __: string) => {
+    result = result.map((object: any) => {
       if (object[childrenKey]) {
         const transformedChildren = traverse(object[childrenKey])
         // in parseHTML, if a tag is in unwrap list, like <span>aaa<span>bbb</span></span>
         // the result needs to be flatten
-        const children = _.isEmpty(transformedChildren)
+        const children = isEmpty(transformedChildren)
           ? undefined
-          : _.flattenDeep(transformedChildren)
+          : flattenDeep<GeneralObject>(transformedChildren)
         if (transformer) {
           return transformer(object, children)
         }
@@ -134,11 +137,11 @@ export const traverseNestedObject = (
     })
 
     if (postFilter) {
-      result = _.filter(result, postFilter)
+      result = result.filter(postFilter)
     }
 
     return result
   }
 
-  return _.flattenDeep(traverse(_rootObject))
+  return flattenDeep<GeneralObject>(traverse(_rootObject))
 }

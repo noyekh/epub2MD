@@ -1,4 +1,3 @@
-// import TurndownService from 'turndown'
 import { NodeHtmlMarkdown } from 'node-html-markdown'
 
 /**
@@ -8,12 +7,5 @@ const convert = (htmlString: string, options?: Parameters<typeof NodeHtmlMarkdow
     useLinkReferenceDefinitions: false,
     ...options
 })
-
-// export const convert = (str: string) => new TurndownService({
-//     headingStyle: 'atx',
-//     codeBlockStyle: 'fenced',
-//     bulletListMarker: '-',
-// }).turndown(str)
-
 
 export default convert as (htmlString: string) => string

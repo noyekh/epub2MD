@@ -1,7 +1,6 @@
-import { basename, dirname, extname, format, join, parse } from 'node:path'
-import { existsSync, mkdirSync, readv } from 'node:fs'
+import { basename, dirname, extname, join } from 'node:path'
+import { existsSync, mkdirSync } from 'node:fs'
 import logger, { name } from '../logger'
-import _ from 'lodash'
 import { writeFileSync } from 'write-file-safe'
 
 import parseEpub from '../parseEpub'
@@ -278,7 +277,13 @@ export class Converter {
       } else if (resLinks.length > 0) {
         logger.warn('Remote images are detected, you can set --localize to true to localize the remote images')
       }
-      content = needAutoCorrect ? require('autocorrect-node').format(content) : content
+      if (needAutoCorrect) {
+        try {
+          content = require('autocorrect-node').format(content)
+        } catch {
+          throw new Error('autocorrect-node is not installed. Run: npm install autocorrect-node')
+        }
+      }
     } else {
       content = this.epub!.resolve(filepath).asNodeBuffer()
     }

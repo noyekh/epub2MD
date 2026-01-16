@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm install)",
+      "Bash(npm audit:*)",
+      "Bash(npm exec:*)",
+      "Bash(npm test:*)",
+      "Bash(node lib/bin/cli.cjs:*)",
+      "Bash(echo:*)",
+      "Bash(npx tsc:*)",
+      "Bash(du:*)",
+      "Bash(npm ls:*)",
+      "Bash(npm pack:*)",
+      "Bash(done)",
+      "Bash(pnpm run build:*)",
+      "Bash(npx jest --no-cache)",
+      "Bash(npm view:*)",
+      "Bash(for pkg in autocorrect-node jsdom)"
+    ]
+  }
+}

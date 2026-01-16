@@ -1,5 +1,4 @@
 import parser from '../src/parseEpub'
-import _ from 'lodash'
 import * as path from 'path'
 
 const baseDir = process.cwd()
@@ -13,7 +12,7 @@ const testFile = (filename: string) => {
     })
 
     test('Result should have keys', async () => {
-      const keys = _.keys(await fileContent)
+      const keys = Object.keys(await fileContent)
       expect(keys.length).not.toBe(0)
     })
 

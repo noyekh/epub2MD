@@ -1,5 +1,4 @@
 import parseHTML from '../src/parseHTML'
-import _ from 'lodash'
 
 describe('parseHTML1', () => {
   it('unwrap tag in unwrap tag situation', () => {

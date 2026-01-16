@@ -11,7 +11,7 @@ const rmdir = promisify(fs.rm)
 // 封装execSync，捕获错误并返回简单的错误信息，避免循环引用
 function safeExecSync(command: string, options?: { timeout?: number }): string {
     try {
-        return execSync(command, options).toString();
+        return execSync(command, { timeout: 60000, ...options }).toString();
     } catch (error) {
         // 避免返回整个错误对象，防止循环引用
         return `Error: ${error instanceof Error ? error.message : String(error)}`;

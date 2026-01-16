@@ -1,7 +1,9 @@
 import { JSDOM } from 'jsdom'
-import _ from 'lodash'
 import { traverseNestedObject } from './utils'
 import { HtmlNodeObject, GeneralObject } from './types'
+
+const isEmpty = (obj: any): boolean =>
+  obj == null || (typeof obj === 'object' && Object.keys(obj).length === 0)
 
 const OMITTED_TAGS = ['head', 'input', 'textarea', 'script', 'style', 'svg']
 const UNWRAP_TAGS = ['body', 'html', 'div', 'span']
@@ -109,7 +111,7 @@ const parseHTML = (HTMLString: string, config: ParseHTMLConfig = {}): HtmlNodeOb
       }
     },
     postFilter(node) {
-      return !_.isEmpty(node)
+      return !isEmpty(node)
     },
   }) as HtmlNodeObject[]
 }
